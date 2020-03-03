@@ -14,7 +14,7 @@ type ConnectionInfo struct {
 	packetsDstToSrc, bytesDstToSrc                   uint64
 	packetsSrcToDstAccounted, bytesSrcToDstAccounted uint64
 	packetsDstToSrcAccounted, bytesDstToSrcAccounted uint64
-	closed                                           bool
+	connectionTrackingDisabled                       bool // connection is untrackable or closed
 	start                                            time.Time
 }
 
@@ -22,7 +22,7 @@ var connections = make(map[uint32]*ConnectionInfo)
 
 func accountOpenConnections() {
 	for _, info := range connections {
-		if !info.closed {
+		if !info.connectionTrackingDisabled {
 			AccountOpenConnection(info)
 		}
 	}
@@ -53,12 +53,12 @@ func handleDump(flows []conntrack.Flow) {
 				// But we can count future traffic if accounting is enabled.
 				if flow.CountersOrig.Packets != 0 || flow.CountersReply.Packets != 0 {
 					connections[flow.ID] = &ConnectionInfo{
-						key:                      AccountingKey(&flow),
-						packetsSrcToDstAccounted: flow.CountersOrig.Packets,
-						bytesSrcToDstAccounted:   flow.CountersOrig.Bytes,
-						packetsDstToSrcAccounted: flow.CountersReply.Packets,
-						bytesDstToSrcAccounted:   flow.CountersReply.Bytes,
-						closed:                   true, // hack to disable connection tracking
+						key:                        AccountingKey(&flow),
+						packetsSrcToDstAccounted:   flow.CountersOrig.Packets,
+						bytesSrcToDstAccounted:     flow.CountersOrig.Bytes,
+						packetsDstToSrcAccounted:   flow.CountersReply.Packets,
+						bytesDstToSrcAccounted:     flow.CountersReply.Bytes,
+						connectionTrackingDisabled: true,
 					}
 				}
 			}
@@ -68,7 +68,11 @@ func handleDump(flows []conntrack.Flow) {
 }
 
 func handleNewFlow(flow *conntrack.Flow) {
-	connections[flow.ID] = &ConnectionInfo{key: AccountingKey(flow), start: time.Now()}
+	connections[flow.ID] = &ConnectionInfo{
+		key:                        AccountingKey(flow),
+		start:                      time.Now(),
+		connectionTrackingDisabled: flow.TupleOrig.Proto.Protocol != PROTO_TCP && flow.TupleOrig.Proto.Protocol != PROTO_DCCP && flow.TupleOrig.Proto.Protocol != PROTO_SCTP,
+	}
 }
 
 func handleDestroyFlow(flow *conntrack.Flow) {
@@ -83,7 +87,7 @@ func handleDestroyFlow(flow *conntrack.Flow) {
 			info.bytesDstToSrc = flow.CountersReply.Bytes
 		}
 		AccountTraffic(info)
-		if !info.closed {
+		if !info.connectionTrackingDisabled {
 			AccountConnectionClose(info)
 		}
 	}
@@ -91,7 +95,7 @@ func handleDestroyFlow(flow *conntrack.Flow) {
 
 func handleTerminateFlow(flow *conntrack.Flow) {
 	if info, ok := connections[flow.ID]; ok {
-		if !info.closed {
+		if !info.connectionTrackingDisabled {
 			AccountConnectionClose(info)
 		}
 	}
@@ -105,9 +109,11 @@ func handleConntrackEvent(event conntrack.Event) {
 		handleDestroyFlow(event.Flow)
 	case conntrack.EventUpdate:
 		// Check if we know this flow and should terminate it
-		state := event.Flow.ProtoInfo.TCP.State
-		if state == TCP_CONNTRACK_CLOSE_WAIT || state == TCP_CONNTRACK_LAST_ACK || state == TCP_CONNTRACK_CLOSE {
-			handleTerminateFlow(event.Flow)
+		if event.Flow.TupleOrig.Proto.Protocol == PROTO_TCP {
+			state := event.Flow.ProtoInfo.TCP.State
+			if state == TCP_CONNTRACK_CLOSE_WAIT || state == TCP_CONNTRACK_LAST_ACK || state == TCP_CONNTRACK_CLOSE {
+				handleTerminateFlow(event.Flow)
+			}
 		}
 	}
 }
@@ -154,7 +160,7 @@ func runDumping(channel chan []conntrack.Flow, timestamp int64) {
 	log.Println("[Dump] Received", len(flows), "conntrack table entries in", time.Now().Sub(start).Milliseconds(), "ms")
 }
 
-func GetDumpingChannel(interval int64) chan []conntrack.Flow {
+func GetDumpingChannel() chan []conntrack.Flow {
 	channel := make(chan []conntrack.Flow, 1)
 	go runDumping(channel, time.Now().Unix())
 	return channel

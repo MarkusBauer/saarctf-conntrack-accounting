@@ -19,7 +19,7 @@ type AccountingEntry struct {
 var AccountingTable = make(map[string]*AccountingEntry)
 
 func AccountingKey(flow *conntrack.Flow) string {
-	return flow.TupleOrig.IP.SourceAddress.String() + "," + flow.TupleOrig.IP.DestinationAddress.String() + "," + strconv.FormatUint(uint64(flow.TupleOrig.Proto.DestinationPort), 10)
+	return ProtoLookup(flow.TupleOrig.Proto.Protocol) + "," + flow.TupleOrig.IP.SourceAddress.String() + "," + flow.TupleOrig.IP.DestinationAddress.String() + "," + strconv.FormatUint(uint64(flow.TupleOrig.Proto.DestinationPort), 10)
 }
 
 func getOrCreateAccountingTableEntry(key string) *AccountingEntry {
@@ -52,11 +52,13 @@ func AccountTraffic(info *ConnectionInfo) {
 }
 
 func AccountConnectionClose(info *ConnectionInfo) {
-	info.closed = true
-	duration := time.Now().Sub(info.start).Milliseconds()
-	entry := getOrCreateAccountingTableEntry(info.key)
-	entry.connectionCount += 1
-	entry.connectionTime += duration
+	if !info.connectionTrackingDisabled {
+		info.connectionTrackingDisabled = true
+		duration := time.Now().Sub(info.start).Milliseconds()
+		entry := getOrCreateAccountingTableEntry(info.key)
+		entry.connectionCount += 1
+		entry.connectionTime += duration
+	}
 }
 
 func AccountOpenConnection(info *ConnectionInfo) {

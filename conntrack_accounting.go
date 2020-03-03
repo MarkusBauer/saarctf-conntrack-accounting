@@ -28,7 +28,7 @@ var TrackOpenConnections bool
 
 // Check if we should consider a conntrack flow (after src / dst filter)
 func FlowIsInteresting(flow *conntrack.Flow) bool {
-	if flow.TupleOrig.IP.IsIPv6() {
+	if flow.TupleOrig.IP.IsIPv6() || flow.TupleOrig.Proto.Protocol == PROTO_ICMP {
 		return false
 	}
 	if SourceFilterPresent && !flow.TupleOrig.IP.SourceAddress.Mask(SourceFilterMask).Equal(SourceFilterIP) {
@@ -50,7 +50,7 @@ func WaitForTerminationChannel() chan os.Signal {
 func MainLoop() {
 	conntrackEventChannel, conntrackErrorChannel := GetConntrackEvents()
 	signalChannel := WaitForTerminationChannel()
-	dumpingChannel := GetDumpingChannel(Interval)
+	dumpingChannel := GetDumpingChannel()
 	log.Println("Running ...")
 	var eventCounter int
 	var interestingEventCounter int
@@ -132,7 +132,7 @@ func main() {
 			log.Fatal(err)
 		}
 		defer Output.Close()
-		log.Println("Opened pipe \"" + *pipeFile + "\" ...")
+		log.Println("Writing output to pipe \"" + *pipeFile + "\" ...")
 	}
 
 	if interval != nil && *interval > 1 {

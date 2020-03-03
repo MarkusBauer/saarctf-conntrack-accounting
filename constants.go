@@ -1,6 +1,11 @@
 package main
 
+import "strconv"
+
+const PROTO_ICMP = 1
 const PROTO_TCP = 6
+const PROTO_DCCP = 33
+const PROTO_SCTP = 132
 
 const (
 	TCP_CONNTRACK_NONE        = 0
@@ -19,3 +24,26 @@ const (
 	TCP_CONNTRACK_UNACK       = 13
 	TCP_CONNTRACK_TIMEOUT_MAX = 14
 )
+
+// protoLookup translates a protocol integer into its string representation.
+func ProtoLookup(p uint8) string {
+	protos := map[uint8]string{
+		1:   "icmp",
+		2:   "igmp",
+		6:   "tcp",
+		17:  "udp",
+		33:  "dccp",
+		47:  "gre",
+		58:  "ipv6-icmp",
+		94:  "ipip",
+		115: "l2tp",
+		132: "sctp",
+		136: "udplite",
+	}
+
+	if val, ok := protos[p]; ok {
+		return val
+	}
+
+	return strconv.FormatUint(uint64(p), 10)
+}
