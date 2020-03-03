@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/ti-mo/conntrack"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -17,7 +18,7 @@ type AccountingEntry struct {
 var AccountingTable = make(map[string]*AccountingEntry)
 
 func getOrCreateAccountingTableEntry(flow *conntrack.Flow) *AccountingEntry {
-	key := flow.TupleOrig.IP.SourceAddress.String() + "," + flow.TupleOrig.IP.DestinationAddress.String() + "," + string(flow.TupleOrig.Proto.DestinationPort)
+	key := flow.TupleOrig.IP.SourceAddress.String() + "," + flow.TupleOrig.IP.DestinationAddress.String() + "," + strconv.FormatUint(uint64(flow.TupleOrig.Proto.DestinationPort), 10)
 	entry := AccountingTable[key]
 	if entry == nil {
 		entry = &AccountingEntry{}
@@ -55,32 +56,31 @@ func AccountConnectionClose(flow *conntrack.Flow, info *ConnectionInfo) {
 }
 
 func FlushAccountingTableToOutput() {
+	start := time.Now()
+	size := len(AccountingTable)
 	for key, entry := range AccountingTable {
 		var line strings.Builder
 		line.WriteString(key)
 		line.WriteString(",")
-		line.WriteString(string(entry.connectionCount))
+		line.WriteString(strconv.Itoa(entry.connectionCount))
 		line.WriteString(",")
-		line.WriteString(string(entry.connectionTime))
+		line.WriteString(strconv.FormatInt(entry.connectionTime, 10))
 		line.WriteString(",")
-		line.WriteString(string(entry.packetsSrcToDst))
+		line.WriteString(strconv.FormatUint(entry.packetsSrcToDst, 10))
 		line.WriteString(",")
-		line.WriteString(string(entry.packetsDstToSrc))
+		line.WriteString(strconv.FormatUint(entry.packetsDstToSrc, 10))
 		line.WriteString(",")
-		line.WriteString(string(entry.bytesSrcToDst))
+		line.WriteString(strconv.FormatUint(entry.bytesSrcToDst, 10))
 		line.WriteString(",")
-		line.WriteString(string(entry.bytesDstToSrc))
+		line.WriteString(strconv.FormatUint(entry.bytesDstToSrc, 10))
 		line.WriteString("\n")
 		_, err := Output.WriteString(line.String())
 		if err != nil {
-			log.Fatal("Output write", err)
+			log.Fatal("Output write error: ", err)
 		}
-	}
-	// Flush output
-	err := Output.Sync()
-	if err != nil {
-		log.Fatal("Output sync", err)
 	}
 	// Clear accounting table
 	AccountingTable = make(map[string]*AccountingEntry)
+
+	log.Println("[Output] wrote", size, "entries in", time.Now().Sub(start).Milliseconds(), "ms")
 }

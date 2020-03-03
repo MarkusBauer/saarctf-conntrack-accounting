@@ -2,12 +2,12 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"github.com/ti-mo/conntrack"
 	"log"
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 )
 
@@ -23,6 +23,7 @@ var DestFilterPresent bool
 var DestFilterIP net.IP = net.IPv4(0, 0, 0, 0)
 var DestFilterMask net.IPMask = net.IPv4Mask(255, 255, 255, 255)
 var Output *os.File = os.Stdout
+var Interval int64 = 15
 
 // Check if we should consider a conntrack flow (after src / dst filter)
 func FlowIsInteresting(flow *conntrack.Flow) bool {
@@ -48,12 +49,17 @@ func WaitForTerminationChannel() chan os.Signal {
 func MainLoop() {
 	conntrackEventChannel, conntrackErrorChannel := GetConntrackEvents()
 	signalChannel := WaitForTerminationChannel()
-	fmt.Println("Running ...")
+	dumpingChannel := GetDumpingChannel(Interval)
+	log.Println("Running ...")
+	var eventCounter int
+	var interestingEventCounter int
 
 	for {
 		select {
 		case event := <-conntrackEventChannel:
+			eventCounter++
 			if event.Flow != nil && FlowIsInteresting(event.Flow) {
+				interestingEventCounter++
 				handleConntrackEvent(event)
 			}
 		case err := <-conntrackErrorChannel:
@@ -62,9 +68,16 @@ func MainLoop() {
 			}
 			return
 		case sig := <-signalChannel:
-			fmt.Println("Terminating with signal " + sig.String() + " ...")
+			log.Println("[Signal] Terminating with signal \"" + sig.String() + "\" ...")
 			FlushAccountingTableToOutput()
 			return
+		case dump := <-dumpingChannel:
+			handleDump(dump)
+			log.Println("[Events]", interestingEventCounter, "("+strconv.Itoa(eventCounter)+") events since last update")
+			eventCounter = 0
+			interestingEventCounter = 0
+			FlushAccountingTableToOutput()
+			go runDumping(dumpingChannel, nextTimestamp(Interval))
 		}
 	}
 }
@@ -75,7 +88,8 @@ func main() {
 	srcfilterMask := flag.String("srcmask", "255.255.255.255", "Source filter mask")
 	dstfilter := flag.String("dst", "", "Destination filter")
 	dstfilterMask := flag.String("dstmask", "255.255.255.255", "Destination filter mask")
-	pipeFile := flag.String("pipe", "/tmp/conntrack_acct", "Pipe file to use")
+	pipeFile := flag.String("pipe", "", "Pipe file to use")
+	interval := flag.Int64("interval", 15, "Output interval")
 	flag.Parse()
 
 	if srcfilter != nil && *srcfilter != "" {
@@ -84,7 +98,7 @@ func main() {
 		}
 		SourceFilterIP = net.ParseIP(*srcfilter).Mask(SourceFilterMask)
 		SourceFilterPresent = true
-		fmt.Printf("Source filter: %s/%s\n", SourceFilterIP, SourceFilterMask)
+		log.Printf("Source filter: %s/%s\n", SourceFilterIP, SourceFilterMask)
 	}
 	if dstfilter != nil && *dstfilter != "" {
 		if dstfilterMask != nil {
@@ -92,12 +106,12 @@ func main() {
 		}
 		DestFilterIP = net.ParseIP(*dstfilter).Mask(DestFilterMask)
 		DestFilterPresent = true
-		fmt.Printf("Destination filter: %s/%s\n", DestFilterIP, DestFilterMask)
+		log.Printf("Destination filter: %s/%s\n", DestFilterIP, DestFilterMask)
 	}
 
 	if pipeFile != nil && *pipeFile != "" {
 		err := os.Remove(*pipeFile)
-		if err != nil {
+		if err != nil && !os.IsNotExist(err) {
 			log.Fatal(err)
 		}
 		err = syscall.Mkfifo(*pipeFile, 0660)
@@ -110,6 +124,10 @@ func main() {
 			log.Fatal(err)
 		}
 		defer Output.Close()
+	}
+
+	if interval != nil && *interval > 1 {
+		Interval = *interval
 	}
 
 	MainLoop()

@@ -19,6 +19,12 @@ type ConnectionInfo struct {
 
 var connections = make(map[uint32]*ConnectionInfo)
 
+func handleDump(flows []conntrack.Flow) {
+	log.Println("[Dump] Received", len(flows), "flows.")
+	start := time.Now()
+	log.Println("[Dump] Handled", len(flows), "flows in", time.Now().Sub(start).Milliseconds(), "ms")
+}
+
 func handleNewFlow(flow *conntrack.Flow) {
 	connections[flow.ID] = &ConnectionInfo{start: time.Now()}
 }
@@ -81,4 +87,19 @@ func GetConntrackEvents() (chan conntrack.Event, chan error) {
 		log.Fatal(err)
 	}
 	return eventChannel, errorChannel
+}
+
+func nextTimestamp(interval int64) int64 {
+	return (time.Now().Unix()/interval)*interval + interval
+}
+
+func runDumping(channel chan []conntrack.Flow, timestamp int64) {
+	time.Sleep(time.Unix(timestamp, 0).Sub(time.Now()))
+	channel <- make([]conntrack.Flow, 0)
+}
+
+func GetDumpingChannel(interval int64) chan []conntrack.Flow {
+	channel := make(chan []conntrack.Flow, 1)
+	go runDumping(channel, nextTimestamp(interval))
+	return channel
 }
