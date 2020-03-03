@@ -1,4 +1,4 @@
-package conntrack_accounting
+package main
 
 import (
 	"fmt"
@@ -6,6 +6,8 @@ import (
 	"github.com/ti-mo/conntrack"
 	"github.com/ti-mo/netfilter"
 	"log"
+	"os"
+	"os/signal"
 )
 
 // Direction:
@@ -63,9 +65,7 @@ func ListenForConntrackEvents() {
 				// Check if we know this flow and should terminate it
 				state := event.Flow.ProtoInfo.TCP.State
 				if state == TCP_CONNTRACK_CLOSE_WAIT || state == TCP_CONNTRACK_LAST_ACK || state == TCP_CONNTRACK_CLOSE {
-					if _, exists := connections[event.Flow.ID]; exists {
-						handleTerminateFlow(event.Flow)
-					}
+					handleTerminateFlow(event.Flow)
 				}
 			}
 		case err := <-errorChannel:
@@ -78,7 +78,17 @@ func ListenForConntrackEvents() {
 	}
 }
 
+func waitForTermination() {
+	var signalChannel chan os.Signal
+	signalChannel = make(chan os.Signal, 1)
+	signal.Notify(signalChannel, os.Interrupt)
+	<-signalChannel
+}
+
 func main() {
 	// TODO some filter options
 	go ListenForConntrackEvents()
+	fmt.Println("Running ...")
+	waitForTermination()
+	fmt.Println("Terminated.")
 }

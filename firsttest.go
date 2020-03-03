@@ -1,4 +1,4 @@
-package conntrack_accounting
+package main
 
 import (
 	"fmt"
@@ -13,26 +13,6 @@ import (
 
 // echo 1 > /proc/sys/net/netfilter/nf_conntrack_acct
 // echo 1 > /proc/sys/net/netfilter/nf_conntrack_timestamp
-
-const PROTO_TCP = 6
-
-const (
-	TCP_CONNTRACK_NONE        = 0
-	TCP_CONNTRACK_SYN_SENT    = 1
-	TCP_CONNTRACK_SYN_RECV    = 2
-	TCP_CONNTRACK_ESTABLISHED = 3
-	TCP_CONNTRACK_FIN_WAIT    = 4
-	TCP_CONNTRACK_CLOSE_WAIT  = 5
-	TCP_CONNTRACK_LAST_ACK    = 6
-	TCP_CONNTRACK_TIME_WAIT   = 7
-	TCP_CONNTRACK_CLOSE       = 8
-	TCP_CONNTRACK_LISTEN      = 9
-	TCP_CONNTRACK_MAX         = 10
-	TCP_CONNTRACK_IGNORE      = 11
-	TCP_CONNTRACK_RETRANS     = 12
-	TCP_CONNTRACK_UNACK       = 13
-	TCP_CONNTRACK_TIMEOUT_MAX = 14
-)
 
 var subnetFilterAddr = net.IPv4(10, 32, 0, 0)
 var subnetFilterMask = net.IPMask{255, 255, 0, 0}
@@ -57,7 +37,7 @@ func dumpTable() {
 }
 
 
-func main() {
+func old_main() {
 	fmt.Println("Hello World!")
 
 	conn, err := conntrack.Dial(nil)
