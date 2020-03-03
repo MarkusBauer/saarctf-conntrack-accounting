@@ -20,9 +20,41 @@ type ConnectionInfo struct {
 var connections = make(map[uint32]*ConnectionInfo)
 
 func handleDump(flows []conntrack.Flow) {
-	log.Println("[Dump] Received", len(flows), "flows.")
+	if len(flows) == 0 {
+		return
+	}
 	start := time.Now()
-	log.Println("[Dump] Handled", len(flows), "flows in", time.Now().Sub(start).Milliseconds(), "ms")
+	var interestingFlowCounter int
+	for _, flow := range flows {
+		if FlowIsInteresting(&flow) {
+			interestingFlowCounter++
+			if info, ok := connections[flow.ID]; ok {
+				// We know this flow, update its stats
+				if flow.CountersOrig.Packets != 0 && flow.CountersOrig.Bytes != 0 {
+					info.packetsSrcToDst = flow.CountersOrig.Packets
+					info.bytesSrcToDst = flow.CountersOrig.Bytes
+				}
+				if flow.CountersReply.Packets != 0 && flow.CountersReply.Bytes != 0 {
+					info.packetsDstToSrc = flow.CountersReply.Packets
+					info.bytesDstToSrc = flow.CountersReply.Bytes
+				}
+				AccountTraffic(&flow, info)
+			} else {
+				// We don't know this flow, so we can't do connection tracking.
+				// But we can count future traffic if accounting is enabled.
+				if flow.CountersOrig.Packets != 0 || flow.CountersReply.Packets != 0 {
+					connections[flow.ID] = &ConnectionInfo{
+						packetsSrcToDstAccounted: flow.CountersOrig.Packets,
+						bytesSrcToDstAccounted:   flow.CountersOrig.Bytes,
+						packetsDstToSrcAccounted: flow.CountersReply.Packets,
+						bytesDstToSrcAccounted:   flow.CountersReply.Bytes,
+						closed:                   true, // hack to disable connection tracking
+					}
+				}
+			}
+		}
+	}
+	log.Println("[Dump] Handled", interestingFlowCounter, "flows out of", len(flows), "in", time.Now().Sub(start).Milliseconds(), "ms")
 }
 
 func handleNewFlow(flow *conntrack.Flow) {
@@ -95,11 +127,25 @@ func nextTimestamp(interval int64) int64 {
 
 func runDumping(channel chan []conntrack.Flow, timestamp int64) {
 	time.Sleep(time.Unix(timestamp, 0).Sub(time.Now()))
-	channel <- make([]conntrack.Flow, 0)
+
+	start := time.Now()
+	// Create connection to conntrack
+	conn, err := conntrack.Dial(nil)
+	if err != nil {
+		log.Fatal("Conntrack dial:", err)
+	}
+	// Query dumps
+	flows, err := conn.DumpFilter(conntrack.Filter{Mark: 0, Mask: 0})
+	if err != nil {
+		log.Fatal("DumpFilter:", err)
+	}
+	// Transmit
+	channel <- flows
+	log.Println("[Dump] Received", len(flows), "conntrack table entries in", time.Now().Sub(start).Milliseconds(), "ms")
 }
 
 func GetDumpingChannel(interval int64) chan []conntrack.Flow {
 	channel := make(chan []conntrack.Flow, 1)
-	go runDumping(channel, nextTimestamp(interval))
+	go runDumping(channel, time.Now().Unix())
 	return channel
 }
