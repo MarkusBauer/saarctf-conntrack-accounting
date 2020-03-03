@@ -1,13 +1,14 @@
 package main
 
 import (
+	"flag"
 	"fmt"
-	"github.com/mdlayher/netlink"
 	"github.com/ti-mo/conntrack"
-	"github.com/ti-mo/netfilter"
 	"log"
+	"net"
 	"os"
 	"os/signal"
+	"syscall"
 )
 
 // Direction:
@@ -15,80 +16,101 @@ import (
 // - Dump accounting information there
 // - Close pipe afterwards
 
-func flowIsInteresting(flow *conntrack.Flow) bool {
-	//TODO
-	return false
-}
+var SourceFilterPresent bool
+var SourceFilterIP net.IP = net.IPv4(0, 0, 0, 0)
+var SourceFilterMask net.IPMask = net.IPv4Mask(255, 255, 255, 255)
+var DestFilterPresent bool
+var DestFilterIP net.IP = net.IPv4(0, 0, 0, 0)
+var DestFilterMask net.IPMask = net.IPv4Mask(255, 255, 255, 255)
+var Output *os.File = os.Stdout
 
-func handleNewFlow(flow *conntrack.Flow) {
-	//TODO
-}
-
-func handleDestroyFlow(flow *conntrack.Flow) {
-	//TODO
-}
-
-func handleTerminateFlow(flow *conntrack.Flow) {
-	//TODO
-}
-
-func ListenForConntrackEvents() {
-	conn, err := conntrack.Dial(nil)
-	if err != nil {
-		log.Fatal(err)
+// Check if we should consider a conntrack flow (after src / dst filter)
+func FlowIsInteresting(flow *conntrack.Flow) bool {
+	if flow.TupleOrig.IP.IsIPv6() {
+		return false
 	}
-
-	eventChannel := make(chan conntrack.Event, 1024)
-	errorChannel, err := conn.Listen(eventChannel, 4, netfilter.GroupsCT)
-	if err != nil {
-		log.Fatal(err)
+	if SourceFilterPresent && !flow.TupleOrig.IP.SourceAddress.Mask(SourceFilterMask).Equal(SourceFilterIP) {
+		return false
 	}
-
-	err = conn.SetOption(netlink.ListenAllNSID, true)
-	if err != nil {
-		log.Fatal(err)
+	if DestFilterPresent && !flow.TupleOrig.IP.DestinationAddress.Mask(DestFilterMask).Equal(DestFilterIP) {
+		return false
 	}
+	return true
+}
+
+// Create a channel that delivers termination signals
+func WaitForTerminationChannel() chan os.Signal {
+	signalChannel := make(chan os.Signal, 1)
+	signal.Notify(signalChannel, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	return signalChannel
+}
+
+func MainLoop() {
+	conntrackEventChannel, conntrackErrorChannel := GetConntrackEvents()
+	signalChannel := WaitForTerminationChannel()
+	fmt.Println("Running ...")
 
 	for {
 		select {
-		case event := <-eventChannel:
-			if event.Flow == nil || !flowIsInteresting(event.Flow) {
-				continue
+		case event := <-conntrackEventChannel:
+			if event.Flow != nil && FlowIsInteresting(event.Flow) {
+				handleConntrackEvent(event)
 			}
-
-			switch event.Type {
-			case conntrack.EventNew:
-				handleNewFlow(event.Flow)
-			case conntrack.EventDestroy:
-				handleDestroyFlow(event.Flow)
-			case conntrack.EventUpdate:
-				// Check if we know this flow and should terminate it
-				state := event.Flow.ProtoInfo.TCP.State
-				if state == TCP_CONNTRACK_CLOSE_WAIT || state == TCP_CONNTRACK_LAST_ACK || state == TCP_CONNTRACK_CLOSE {
-					handleTerminateFlow(event.Flow)
-				}
-			}
-		case err := <-errorChannel:
+		case err := <-conntrackErrorChannel:
 			if err != nil {
-				log.Fatal(err)
+				log.Fatal("Socket error channel:", err)
 			}
-			fmt.Println("Terminating...")
+			return
+		case sig := <-signalChannel:
+			fmt.Println("Terminating with signal " + sig.String() + " ...")
+			FlushAccountingTableToOutput()
 			return
 		}
 	}
 }
 
-func waitForTermination() {
-	var signalChannel chan os.Signal
-	signalChannel = make(chan os.Signal, 1)
-	signal.Notify(signalChannel, os.Interrupt)
-	<-signalChannel
-}
-
 func main() {
-	// TODO some filter options
-	go ListenForConntrackEvents()
-	fmt.Println("Running ...")
-	waitForTermination()
-	fmt.Println("Terminated.")
+	//IPv4 only for now
+	srcfilter := flag.String("src", "", "Source filter")
+	srcfilterMask := flag.String("srcmask", "255.255.255.255", "Source filter mask")
+	dstfilter := flag.String("dst", "", "Destination filter")
+	dstfilterMask := flag.String("dstmask", "255.255.255.255", "Destination filter mask")
+	pipeFile := flag.String("pipe", "/tmp/conntrack_acct", "Pipe file to use")
+	flag.Parse()
+
+	if srcfilter != nil && *srcfilter != "" {
+		if srcfilterMask != nil {
+			SourceFilterMask = net.IPMask(net.ParseIP(*srcfilterMask).To4())
+		}
+		SourceFilterIP = net.ParseIP(*srcfilter).Mask(SourceFilterMask)
+		SourceFilterPresent = true
+		fmt.Printf("Source filter: %s/%s\n", SourceFilterIP, SourceFilterMask)
+	}
+	if dstfilter != nil && *dstfilter != "" {
+		if dstfilterMask != nil {
+			DestFilterMask = net.IPMask(net.ParseIP(*dstfilterMask).To4())
+		}
+		DestFilterIP = net.ParseIP(*dstfilter).Mask(DestFilterMask)
+		DestFilterPresent = true
+		fmt.Printf("Destination filter: %s/%s\n", DestFilterIP, DestFilterMask)
+	}
+
+	if pipeFile != nil && *pipeFile != "" {
+		err := os.Remove(*pipeFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		err = syscall.Mkfifo(*pipeFile, 0660)
+		defer os.Remove(*pipeFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		Output, err = os.OpenFile(*pipeFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0777)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer Output.Close()
+	}
+
+	MainLoop()
 }

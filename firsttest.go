@@ -17,7 +17,7 @@ import (
 var subnetFilterAddr = net.IPv4(10, 32, 0, 0)
 var subnetFilterMask = net.IPMask{255, 255, 0, 0}
 
-var connections = make(map[uint32]struct{})
+var old_connections = make(map[uint32]struct{})
 
 
 func dumpTable() {
@@ -30,7 +30,7 @@ func dumpTable() {
 		log.Fatal(err)
 	}
 	for _, flow := range df {
-		if _, exists := connections[flow.ID]; exists {
+		if _, exists := old_connections[flow.ID]; exists {
 			fmt.Println("- ", flow)
 		}
 	}
@@ -74,12 +74,12 @@ func old_main() {
 			switch event.Type {
 			case conntrack.EventNew:
 				fmt.Println(time.Now().Sub(start), "NEW Event:     ", event.Flow.ID, event, )
-				connections[event.Flow.ID] = struct{}{}
+				old_connections[event.Flow.ID] = struct{}{}
 			case conntrack.EventDestroy:
 				fmt.Println(time.Now().Sub(start), "DESTROY Event: ", event.Flow.ID, event)
-				delete(connections, event.Flow.ID)
+				delete(old_connections, event.Flow.ID)
 			case conntrack.EventUpdate:
-				if _, exists := connections[event.Flow.ID]; exists {
+				if _, exists := old_connections[event.Flow.ID]; exists {
 					fmt.Println(time.Now().Sub(start), "UPDATE Event:  ", event.Flow.ID, event)
 					state := event.Flow.ProtoInfo.TCP.State
 					if state == TCP_CONNTRACK_CLOSE_WAIT || state == TCP_CONNTRACK_LAST_ACK || state == TCP_CONNTRACK_CLOSE {
