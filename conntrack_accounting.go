@@ -66,7 +66,7 @@ func WaitForTerminationChannel() chan os.Signal {
 	return signalChannel
 }
 
-func MainLoop() {
+func handleAllChannels() {
 	conntrackEventChannel, conntrackErrorChannel := GetConntrackEvents()
 	signalChannel := WaitForTerminationChannel()
 	dumpingChannel := GetDumpingChannel()
@@ -163,5 +163,5 @@ func main() {
 		log.Println("Could not check or enable conntrack traffic accounting. ")
 		log.Println("Use: echo 1 > " + NetfilterConntrackAcctSetting)
 	}
-	MainLoop()
+	handleAllChannels()
 }

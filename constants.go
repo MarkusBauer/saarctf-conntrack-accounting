@@ -25,7 +25,7 @@ const (
 	TCP_CONNTRACK_TIMEOUT_MAX = 14
 )
 
-// protoLookup translates a protocol integer into its string representation.
+// ProtoLookup translates a protocol integer into its string representation.
 func ProtoLookup(p uint8) string {
 	protos := map[uint8]string{
 		1:   "icmp",
