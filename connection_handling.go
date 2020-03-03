@@ -9,6 +9,7 @@ import (
 )
 
 type ConnectionInfo struct {
+	key                                              string
 	packetsSrcToDst, bytesSrcToDst                   uint64
 	packetsDstToSrc, bytesDstToSrc                   uint64
 	packetsSrcToDstAccounted, bytesSrcToDstAccounted uint64
@@ -18,6 +19,14 @@ type ConnectionInfo struct {
 }
 
 var connections = make(map[uint32]*ConnectionInfo)
+
+func accountOpenConnections() {
+	for _, info := range connections {
+		if !info.closed {
+			AccountOpenConnection(info)
+		}
+	}
+}
 
 func handleDump(flows []conntrack.Flow) {
 	if len(flows) == 0 {
@@ -38,12 +47,13 @@ func handleDump(flows []conntrack.Flow) {
 					info.packetsDstToSrc = flow.CountersReply.Packets
 					info.bytesDstToSrc = flow.CountersReply.Bytes
 				}
-				AccountTraffic(&flow, info)
+				AccountTraffic(info)
 			} else {
 				// We don't know this flow, so we can't do connection tracking.
 				// But we can count future traffic if accounting is enabled.
 				if flow.CountersOrig.Packets != 0 || flow.CountersReply.Packets != 0 {
 					connections[flow.ID] = &ConnectionInfo{
+						key:                      AccountingKey(&flow),
 						packetsSrcToDstAccounted: flow.CountersOrig.Packets,
 						bytesSrcToDstAccounted:   flow.CountersOrig.Bytes,
 						packetsDstToSrcAccounted: flow.CountersReply.Packets,
@@ -58,7 +68,7 @@ func handleDump(flows []conntrack.Flow) {
 }
 
 func handleNewFlow(flow *conntrack.Flow) {
-	connections[flow.ID] = &ConnectionInfo{start: time.Now()}
+	connections[flow.ID] = &ConnectionInfo{key: AccountingKey(flow), start: time.Now()}
 }
 
 func handleDestroyFlow(flow *conntrack.Flow) {
@@ -72,9 +82,9 @@ func handleDestroyFlow(flow *conntrack.Flow) {
 			info.packetsDstToSrc = flow.CountersReply.Packets
 			info.bytesDstToSrc = flow.CountersReply.Bytes
 		}
-		AccountTraffic(flow, info)
+		AccountTraffic(info)
 		if !info.closed {
-			AccountConnectionClose(flow, info)
+			AccountConnectionClose(info)
 		}
 	}
 }
@@ -82,7 +92,7 @@ func handleDestroyFlow(flow *conntrack.Flow) {
 func handleTerminateFlow(flow *conntrack.Flow) {
 	if info, ok := connections[flow.ID]; ok {
 		if !info.closed {
-			AccountConnectionClose(flow, info)
+			AccountConnectionClose(info)
 		}
 	}
 }

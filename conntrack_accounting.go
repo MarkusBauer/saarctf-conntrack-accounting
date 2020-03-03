@@ -24,6 +24,7 @@ var DestFilterIP net.IP = net.IPv4(0, 0, 0, 0)
 var DestFilterMask net.IPMask = net.IPv4Mask(255, 255, 255, 255)
 var Output *os.File = os.Stdout
 var Interval int64 = 15
+var TrackOpenConnections bool
 
 // Check if we should consider a conntrack flow (after src / dst filter)
 func FlowIsInteresting(flow *conntrack.Flow) bool {
@@ -69,6 +70,9 @@ func MainLoop() {
 			return
 		case sig := <-signalChannel:
 			log.Println("[Signal] Terminating with signal \"" + sig.String() + "\" ...")
+			if TrackOpenConnections {
+				accountOpenConnections()
+			}
 			FlushAccountingTableToOutput()
 			return
 		case dump := <-dumpingChannel:
@@ -76,6 +80,9 @@ func MainLoop() {
 			log.Println("[Events]", interestingEventCounter, "("+strconv.Itoa(eventCounter)+") events since last update")
 			eventCounter = 0
 			interestingEventCounter = 0
+			if TrackOpenConnections {
+				accountOpenConnections()
+			}
 			FlushAccountingTableToOutput()
 			go runDumping(dumpingChannel, nextTimestamp(Interval))
 		}
@@ -90,6 +97,7 @@ func main() {
 	dstfilterMask := flag.String("dstmask", "255.255.255.255", "Destination filter mask")
 	pipeFile := flag.String("pipe", "", "Pipe file to use")
 	interval := flag.Int64("interval", 15, "Output interval")
+	flag.BoolVar(&TrackOpenConnections, "track-open", false, "Track open connections")
 	flag.Parse()
 
 	if srcfilter != nil && *srcfilter != "" {
@@ -114,7 +122,7 @@ func main() {
 		if err != nil && !os.IsNotExist(err) {
 			log.Fatal(err)
 		}
-		err = syscall.Mkfifo(*pipeFile, 0660)
+		err = syscall.Mkfifo(*pipeFile, 0644)
 		defer os.Remove(*pipeFile)
 		if err != nil {
 			log.Fatal(err)
@@ -124,6 +132,7 @@ func main() {
 			log.Fatal(err)
 		}
 		defer Output.Close()
+		log.Println("Opened pipe \"" + *pipeFile + "\" ...")
 	}
 
 	if interval != nil && *interval > 1 {
