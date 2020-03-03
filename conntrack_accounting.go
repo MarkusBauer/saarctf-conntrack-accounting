@@ -1,20 +1,21 @@
 package main
 
+// echo 1 > /proc/sys/net/netfilter/nf_conntrack_acct
+
 import (
 	"flag"
 	"github.com/ti-mo/conntrack"
+	"io/ioutil"
 	"log"
 	"net"
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 )
 
-// Direction:
-// - Create a named pipe as output
-// - Dump accounting information there
-// - Close pipe afterwards
+const NetfilterConntrackAcctSetting = "/proc/sys/net/netfilter/nf_conntrack_acct"
 
 var SourceFilterPresent bool
 var SourceFilterIP net.IP = net.IPv4(0, 0, 0, 0)
@@ -38,6 +39,24 @@ func FlowIsInteresting(flow *conntrack.Flow) bool {
 		return false
 	}
 	return true
+}
+
+func EnableNetfilterTrafficAccounting() error {
+	content, err := ioutil.ReadFile(NetfilterConntrackAcctSetting)
+	if err != nil {
+		return err
+	}
+	if strings.Trim(string(content), " \n") == "0" {
+		err = ioutil.WriteFile(NetfilterConntrackAcctSetting, []byte("1"), 0644)
+		if err != nil {
+			return err
+		}
+		log.Println("Enabled conntrack traffic accounting (" + NetfilterConntrackAcctSetting + " = 1)")
+		log.Println("Connections that are already open cannot be tracked.")
+	} else {
+		log.Println("Conntrack traffic accounting is already enabled.")
+	}
+	return nil
 }
 
 // Create a channel that delivers termination signals
@@ -139,5 +158,10 @@ func main() {
 		Interval = *interval
 	}
 
+	err := EnableNetfilterTrafficAccounting()
+	if err != nil {
+		log.Println("Could not check or enable conntrack traffic accounting. ")
+		log.Println("Use: echo 1 > " + NetfilterConntrackAcctSetting)
+	}
 	MainLoop()
 }
