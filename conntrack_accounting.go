@@ -34,7 +34,7 @@ var DestFilterNet = net.IPNet{
 var DestGroupMask = net.IPv4Mask(255, 255, 255, 255)
 
 // Output file, default is stdout
-var Output *os.File = os.Stdout
+var Output = os.Stdout
 
 // Interval to output summaries (in seconds)
 var Interval int64 = 15
@@ -161,15 +161,26 @@ func main() {
 			log.Fatal(err)
 		}
 		err = syscall.Mkfifo(*pipeFile, 0644)
-		defer os.Remove(*pipeFile)
 		if err != nil {
 			log.Fatal(err)
 		}
+		defer func() {
+			err := os.Remove(*pipeFile)
+			if err != nil {
+				log.Println("Error removing pipe:", err)
+			}
+		}()
+
 		Output, err = os.OpenFile(*pipeFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0777)
 		if err != nil {
 			log.Fatal(err)
 		}
-		defer Output.Close()
+		defer func() {
+			err := Output.Close()
+			if err != nil {
+				log.Println("Error closing output:", err)
+			}
+		}()
 		log.Println("Writing output to pipe \"" + *pipeFile + "\" ...")
 	}
 
