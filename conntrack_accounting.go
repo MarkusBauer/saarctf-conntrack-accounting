@@ -17,14 +17,29 @@ import (
 
 const NetfilterConntrackAcctSetting = "/proc/sys/net/netfilter/nf_conntrack_acct"
 
+// Source filter configuration (from command line)
 var SourceFilterPresent bool
-var SourceFilterIP net.IP = net.IPv4(0, 0, 0, 0)
-var SourceFilterMask net.IPMask = net.IPv4Mask(255, 255, 255, 255)
+var SourceFilterNet = net.IPNet{
+	IP:   net.IPv4(0, 0, 0, 0),
+	Mask: net.IPv4Mask(0, 0, 0, 0),
+}
+var SourceGroupMask = net.IPv4Mask(255, 255, 255, 255)
+
+// Destination filter configuration (from command line)
 var DestFilterPresent bool
-var DestFilterIP net.IP = net.IPv4(0, 0, 0, 0)
-var DestFilterMask net.IPMask = net.IPv4Mask(255, 255, 255, 255)
+var DestFilterNet = net.IPNet{
+	IP:   net.IPv4(0, 0, 0, 0),
+	Mask: net.IPv4Mask(0, 0, 0, 0),
+}
+var DestGroupMask = net.IPv4Mask(255, 255, 255, 255)
+
+// Output file, default is stdout
 var Output *os.File = os.Stdout
+
+// Interval to output summaries (in seconds)
 var Interval int64 = 15
+
+// Track open connections (and output them in every interval)
 var TrackOpenConnections bool
 
 // Check if we should consider a conntrack flow (after src / dst filter)
@@ -32,10 +47,10 @@ func FlowIsInteresting(flow *conntrack.Flow) bool {
 	if flow.TupleOrig.IP.IsIPv6() || flow.TupleOrig.Proto.Protocol == PROTO_ICMP {
 		return false
 	}
-	if SourceFilterPresent && !flow.TupleOrig.IP.SourceAddress.Mask(SourceFilterMask).Equal(SourceFilterIP) {
+	if SourceFilterPresent && !SourceFilterNet.Contains(flow.TupleOrig.IP.SourceAddress) {
 		return false
 	}
-	if DestFilterPresent && !flow.TupleOrig.IP.DestinationAddress.Mask(DestFilterMask).Equal(DestFilterIP) {
+	if DestFilterPresent && !DestFilterNet.Contains(flow.TupleOrig.IP.DestinationAddress) {
 		return false
 	}
 	return true
@@ -110,31 +125,35 @@ func handleAllChannels() {
 
 func main() {
 	//IPv4 only for now
-	srcfilter := flag.String("src", "", "Source filter")
-	srcfilterMask := flag.String("srcmask", "255.255.255.255", "Source filter mask")
-	dstfilter := flag.String("dst", "", "Destination filter")
-	dstfilterMask := flag.String("dstmask", "255.255.255.255", "Destination filter mask")
+	srcfilter := flag.String("src", "", "Source network filter (CIDR notation)")
+	srcfilterMask := flag.String("src-group-mask", "255.255.255.255", "Source filter mask")
+	dstfilter := flag.String("dst", "", "Destination network filter (CIDR notation)")
+	dstfilterMask := flag.String("dst-group-mask", "255.255.255.255", "Destination filter mask")
 	pipeFile := flag.String("pipe", "", "Pipe file to use")
 	interval := flag.Int64("interval", 15, "Output interval")
 	flag.BoolVar(&TrackOpenConnections, "track-open", false, "Track open connections")
 	flag.Parse()
 
 	if srcfilter != nil && *srcfilter != "" {
-		if srcfilterMask != nil {
-			SourceFilterMask = net.IPMask(net.ParseIP(*srcfilterMask).To4())
+		_, netrange, err := net.ParseCIDR(*srcfilter)
+		if err != nil {
+			log.Fatal("Invalid src filter:", err)
 		}
-		SourceFilterIP = net.ParseIP(*srcfilter).Mask(SourceFilterMask)
+		SourceFilterNet = *netrange
 		SourceFilterPresent = true
-		log.Printf("Source filter: %s/%s\n", SourceFilterIP, SourceFilterMask)
+		log.Printf("Source filter: %s\n", SourceFilterNet)
 	}
 	if dstfilter != nil && *dstfilter != "" {
-		if dstfilterMask != nil {
-			DestFilterMask = net.IPMask(net.ParseIP(*dstfilterMask).To4())
+		_, netrange, err := net.ParseCIDR(*dstfilter)
+		if err != nil {
+			log.Fatal("Invalid dst filter:", err)
 		}
-		DestFilterIP = net.ParseIP(*dstfilter).Mask(DestFilterMask)
+		SourceFilterNet = *netrange
 		DestFilterPresent = true
-		log.Printf("Destination filter: %s/%s\n", DestFilterIP, DestFilterMask)
+		log.Printf("Destination filter: %s\n", DestFilterNet)
 	}
+	SourceGroupMask = net.IPMask(net.ParseIP(*srcfilterMask).To4())
+	DestGroupMask = net.IPMask(net.ParseIP(*dstfilterMask).To4())
 
 	if pipeFile != nil && *pipeFile != "" {
 		err := os.Remove(*pipeFile)

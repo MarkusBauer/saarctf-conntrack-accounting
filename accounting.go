@@ -19,7 +19,11 @@ type AccountingEntry struct {
 var AccountingTable = make(map[string]*AccountingEntry)
 
 func AccountingKey(flow *conntrack.Flow) string {
-	return ProtoLookup(flow.TupleOrig.Proto.Protocol) + "," + flow.TupleOrig.IP.SourceAddress.String() + "," + flow.TupleOrig.IP.DestinationAddress.String() + "," + strconv.FormatUint(uint64(flow.TupleOrig.Proto.DestinationPort), 10)
+	s := ProtoLookup(flow.TupleOrig.Proto.Protocol) + ","
+	s += flow.TupleOrig.IP.SourceAddress.Mask(SourceGroupMask).String() + ","
+	s += flow.TupleOrig.IP.DestinationAddress.Mask(DestGroupMask).String() + ","
+	s += strconv.FormatUint(uint64(flow.TupleOrig.Proto.DestinationPort), 10)
+	return s
 }
 
 func getOrCreateAccountingTableEntry(key string) *AccountingEntry {
