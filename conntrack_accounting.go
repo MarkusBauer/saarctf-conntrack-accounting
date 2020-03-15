@@ -156,20 +156,22 @@ func main() {
 	DestGroupMask = net.IPMask(net.ParseIP(*dstfilterMask).To4())
 
 	if pipeFile != nil && *pipeFile != "" {
+		/*
 		err := os.Remove(*pipeFile)
 		if err != nil && !os.IsNotExist(err) {
 			log.Fatal(err)
 		}
+		*/
 		err = syscall.Mkfifo(*pipeFile, 0644)
-		if err != nil {
+		if err != nil && !os.IsExist(err) {
 			log.Fatal(err)
 		}
-		defer func() {
+		/*defer func() {
 			err := os.Remove(*pipeFile)
 			if err != nil {
 				log.Println("Error removing pipe:", err)
 			}
-		}()
+		}()*/
 
 		Output, err = os.OpenFile(*pipeFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0777)
 		if err != nil {
