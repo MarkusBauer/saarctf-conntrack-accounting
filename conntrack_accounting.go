@@ -162,7 +162,7 @@ func main() {
 			log.Fatal(err)
 		}
 		*/
-		err = syscall.Mkfifo(*pipeFile, 0644)
+		err := syscall.Mkfifo(*pipeFile, 0644)
 		if err != nil && !os.IsExist(err) {
 			log.Fatal(err)
 		}
