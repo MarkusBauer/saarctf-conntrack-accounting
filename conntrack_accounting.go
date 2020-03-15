@@ -148,7 +148,7 @@ func main() {
 		if err != nil {
 			log.Fatal("Invalid dst filter:", err)
 		}
-		SourceFilterNet = *netrange
+		DestFilterNet = *netrange
 		DestFilterPresent = true
 		log.Printf("Destination filter: %s\n", DestFilterNet)
 	}
