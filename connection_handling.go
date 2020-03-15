@@ -150,6 +150,7 @@ func runDumping(channel chan []conntrack.Flow, timestamp int64) {
 	if err != nil {
 		log.Fatal("Conntrack dial:", err)
 	}
+	defer conn.Close()
 	// Query dumps
 	flows, err := conn.DumpFilter(conntrack.Filter{Mark: 0, Mask: 0})
 	if err != nil {
