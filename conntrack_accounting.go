@@ -33,6 +33,10 @@ var DestFilterNet = net.IPNet{
 }
 var DestGroupMask = net.IPv4Mask(255, 255, 255, 255)
 
+// Exclude this IP
+var IpExcludePresent bool
+var IpExclude net.IP
+
 // Output file, default is stdout
 var Output = os.Stdout
 
@@ -45,6 +49,9 @@ var TrackOpenConnections bool
 // Check if we should consider a conntrack flow (after src / dst filter)
 func FlowIsInteresting(flow *conntrack.Flow) bool {
 	if flow.TupleOrig.IP.IsIPv6() || flow.TupleOrig.Proto.Protocol == PROTO_ICMP {
+		return false
+	}
+	if IpExcludePresent && (IpExclude.Equal(flow.TupleOrig.IP.SourceAddress) || IpExclude.Equal(flow.TupleOrig.IP.DestinationAddress)) {
 		return false
 	}
 	if SourceFilterPresent && !SourceFilterNet.Contains(flow.TupleOrig.IP.SourceAddress) {
@@ -129,6 +136,7 @@ func main() {
 	srcfilterMask := flag.String("src-group-mask", "255.255.255.255", "Source filter mask")
 	dstfilter := flag.String("dst", "", "Destination network filter (CIDR notation)")
 	dstfilterMask := flag.String("dst-group-mask", "255.255.255.255", "Destination filter mask")
+	excludeIP := flag.String("exclude-ip", "", "Exclude connections from or to a single IP")
 	pipeFile := flag.String("pipe", "", "Pipe file to use")
 	interval := flag.Int64("interval", 15, "Output interval")
 	flag.BoolVar(&TrackOpenConnections, "track-open", false, "Track open connections")
@@ -154,6 +162,11 @@ func main() {
 	}
 	SourceGroupMask = net.IPMask(net.ParseIP(*srcfilterMask).To4())
 	DestGroupMask = net.IPMask(net.ParseIP(*dstfilterMask).To4())
+	if excludeIP != nil && *excludeIP != "" {
+		IpExclude = net.ParseIP(*excludeIP)
+		IpExcludePresent = true
+		log.Printf("Exclude IP: %s\n", IpExclude)
+	}
 
 	if pipeFile != nil && *pipeFile != "" {
 		/*
