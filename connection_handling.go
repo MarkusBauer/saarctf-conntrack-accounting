@@ -109,7 +109,7 @@ func handleConntrackEvent(event conntrack.Event) {
 		handleDestroyFlow(event.Flow)
 	case conntrack.EventUpdate:
 		// Check if we know this flow and should terminate it
-		if event.Flow.TupleOrig.Proto.Protocol == PROTO_TCP {
+		if event.Flow.TupleOrig.Proto.Protocol == PROTO_TCP && event.Flow.ProtoInfo.TCP != nil {
 			state := event.Flow.ProtoInfo.TCP.State
 			if state == TCP_CONNTRACK_CLOSE_WAIT || state == TCP_CONNTRACK_LAST_ACK || state == TCP_CONNTRACK_CLOSE {
 				handleTerminateFlow(event.Flow)
