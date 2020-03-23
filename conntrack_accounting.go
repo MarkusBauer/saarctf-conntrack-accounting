@@ -5,6 +5,7 @@ package main
 import (
 	"flag"
 	"github.com/ti-mo/conntrack"
+	"golang.org/x/sys/unix"
 	"io/ioutil"
 	"log"
 	"net"
@@ -16,6 +17,9 @@ import (
 )
 
 const NetfilterConntrackAcctSetting = "/proc/sys/net/netfilter/nf_conntrack_acct"
+
+// 2020 we saw at most 117696 entries. That means: this pipe has a buffer for 285 bytes / entry.
+const PipeBufferSize = 32*1024*1024
 
 // Source filter configuration (from command line)
 var SourceFilterPresent bool
@@ -169,16 +173,11 @@ func main() {
 	}
 
 	if pipeFile != nil && *pipeFile != "" {
-		/*
-		err := os.Remove(*pipeFile)
-		if err != nil && !os.IsNotExist(err) {
-			log.Fatal(err)
-		}
-		*/
 		err := syscall.Mkfifo(*pipeFile, 0644)
 		if err != nil && !os.IsExist(err) {
 			log.Fatal(err)
 		}
+		isNewPipe := err == nil
 		/*defer func() {
 			err := os.Remove(*pipeFile)
 			if err != nil {
@@ -196,6 +195,19 @@ func main() {
 				log.Println("Error closing output:", err)
 			}
 		}()
+		// Set the size of the pipe's buffer
+		if (isNewPipe) {
+			_, err = unix.FcntlInt(Output.Fd(), unix.F_SETPIPE_SZ, PipeBufferSize);
+			if err != nil {
+				log.Println("Could not change pipe buffer size: ", err)
+			}
+			pipeBuffer, err := unix.FcntlInt(Output.Fd(), unix.F_GETPIPE_SZ, 0);
+			if err != nil {
+				log.Println("Could not determine pipe buffer size: ", err)
+			} else {
+				log.Println("Pipe buffer size: ", pipeBuffer)
+			}
+		}
 		log.Println("Writing output to pipe \"" + *pipeFile + "\" ...")
 	}
 
