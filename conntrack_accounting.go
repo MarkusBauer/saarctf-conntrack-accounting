@@ -106,7 +106,7 @@ func handleAllChannels() {
 			}
 		case err := <-conntrackErrorChannel:
 			if err != nil {
-				log.Fatal("Socket error channel:", err)
+				log.Fatal("Socket error channel (events):", err)
 			}
 			return
 		case sig := <-signalChannel:

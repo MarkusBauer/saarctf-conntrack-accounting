@@ -124,8 +124,8 @@ func GetConntrackEvents() (chan conntrack.Event, chan error) {
 		log.Fatal(err)
 	}
 
-	eventChannel := make(chan conntrack.Event, 1024)
-	errorChannel, err := conn.Listen(eventChannel, 4, netfilter.GroupsCT)
+	eventChannel := make(chan conntrack.Event, 65536)
+	errorChannel, err := conn.Listen(eventChannel, 8, netfilter.GroupsCT)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -157,8 +157,9 @@ func runDumping(channel chan []conntrack.Flow, timestamp int64) {
 		log.Fatal("DumpFilter:", err)
 	}
 	// Transmit
+	start2 := time.Now()
 	channel <- flows
-	log.Println("[Dump] Received", len(flows), "conntrack table entries in", time.Now().Sub(start).Milliseconds(), "ms")
+	log.Println("[Dump] Received", len(flows), "conntrack table entries in", time.Now().Sub(start).Milliseconds(), "ms (", time.Now().Sub(start2).Milliseconds(), " to transmit)")
 }
 
 func GetDumpingChannel() chan []conntrack.Flow {
