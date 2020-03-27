@@ -178,7 +178,7 @@ func (database *Database) InsertCSV(fname string) {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("Imported %d entries in %d ms\n", len(stats), time.Now().Sub(start).Milliseconds())
+	log.Printf("Imported %d entries in %d ms\n", len(stats), time.Now().Sub(start).Milliseconds())
 }
 
 // COPY IN variant - not save if data is repeated
