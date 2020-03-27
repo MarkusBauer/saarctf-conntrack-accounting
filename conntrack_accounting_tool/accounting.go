@@ -93,6 +93,8 @@ func FlushAccountingTableToOutput(timestamp time.Time) {
 	}
 
 	for key, entry := range AccountingTable {
+		// format:
+		// time,proto,src,dst,port,packets_src,packets_dst,bytes_src,bytes_dst,connection_count,connection_time,open_connections
 		var line strings.Builder
 		line.WriteString(strconv.FormatInt(timestamp.UnixNano(), 10))
 		line.WriteString(",")
