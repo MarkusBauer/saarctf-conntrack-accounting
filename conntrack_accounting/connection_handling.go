@@ -28,13 +28,13 @@ func accountOpenConnections() {
 	}
 }
 
-func handleDump(flows []conntrack.Flow) {
-	if len(flows) == 0 {
+func handleDump(dump DumpResult) {
+	if len(dump.flows) == 0 {
 		return
 	}
 	start := time.Now()
 	var interestingFlowCounter int
-	for _, flow := range flows {
+	for _, flow := range dump.flows {
 		if FlowIsInteresting(&flow) {
 			interestingFlowCounter++
 			if info, ok := connections[flow.ID]; ok {
@@ -64,7 +64,7 @@ func handleDump(flows []conntrack.Flow) {
 			}
 		}
 	}
-	log.Println("[Dump] Handled", interestingFlowCounter, "flows out of", len(flows), "in", time.Now().Sub(start).Milliseconds(), "ms")
+	log.Println("[Dump] Handled", interestingFlowCounter, "flows out of", len(dump.flows), "in", time.Now().Sub(start).Milliseconds(), "ms")
 }
 
 func handleNewFlow(flow *conntrack.Flow) {
@@ -141,7 +141,12 @@ func nextTimestamp(interval int64) int64 {
 	return (time.Now().Unix()/interval)*interval + interval
 }
 
-func runDumping(channel chan []conntrack.Flow, timestamp int64) {
+type DumpResult struct {
+	Timestamp time.Time
+	flows []conntrack.Flow
+}
+
+func runDumping(channel chan DumpResult, timestamp int64) {
 	time.Sleep(time.Unix(timestamp, 0).Sub(time.Now()))
 
 	start := time.Now()
@@ -158,12 +163,12 @@ func runDumping(channel chan []conntrack.Flow, timestamp int64) {
 	}
 	// Transmit
 	start2 := time.Now()
-	channel <- flows
+	channel <- DumpResult{time.Unix(timestamp, 0), flows}
 	log.Println("[Dump] Received", len(flows), "conntrack table entries in", time.Now().Sub(start).Milliseconds(), "ms (", time.Now().Sub(start2).Milliseconds(), " to transmit)")
 }
 
-func GetDumpingChannel() chan []conntrack.Flow {
-	channel := make(chan []conntrack.Flow, 1)
+func GetDumpingChannel() chan DumpResult {
+	channel := make(chan DumpResult, 1)
 	go runDumping(channel, time.Now().Unix())
 	return channel
 }

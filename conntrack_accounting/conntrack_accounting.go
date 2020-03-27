@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 const NetfilterConntrackAcctSetting = "/proc/sys/net/netfilter/nf_conntrack_acct"
@@ -118,7 +119,7 @@ func handleAllChannels() {
 			if TrackOpenConnections {
 				accountOpenConnections()
 			}
-			FlushAccountingTableToOutput()
+			FlushAccountingTableToOutput(time.Now())
 			return
 		case dump := <-dumpingChannel:
 			handleDump(dump)
@@ -128,7 +129,7 @@ func handleAllChannels() {
 			if TrackOpenConnections {
 				accountOpenConnections()
 			}
-			FlushAccountingTableToOutput()
+			FlushAccountingTableToOutput(dump.Timestamp)
 			go runDumping(dumpingChannel, nextTimestamp(Interval))
 		}
 	}

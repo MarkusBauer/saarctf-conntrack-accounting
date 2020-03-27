@@ -70,11 +70,13 @@ func AccountOpenConnection(info *ConnectionInfo) {
 	entry.openConnections += 1
 }
 
-func FlushAccountingTableToOutput() {
+func FlushAccountingTableToOutput(timestamp time.Time) {
 	start := time.Now()
 	size := len(AccountingTable)
 	for key, entry := range AccountingTable {
 		var line strings.Builder
+		line.WriteString(strconv.FormatInt(timestamp.UnixNano(), 10))
+		line.WriteString(",")
 		line.WriteString(key)
 		line.WriteString(",")
 		line.WriteString(strconv.FormatUint(entry.packetsSrcToDst, 10))
