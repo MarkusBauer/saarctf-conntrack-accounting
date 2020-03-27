@@ -3,10 +3,12 @@ package main
 import (
 	"bufio"
 	"errors"
+	"github.com/fsnotify/fsnotify"
 	"log"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var interestingPorts = make(map[string]map[uint16]bool)
@@ -20,13 +22,43 @@ func PortIsInteresting(proto string, port uint16) bool {
 }
 
 var portfile string
-var reloadChannel chan int = make(chan int, 1)
+var reloadChannel chan bool = make(chan bool, 1)
 
 func checkReloads() {
-	// TODO
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		log.Fatal("fsnotify.NewWatcher:", err)
+	}
+	defer watcher.Close()
+
+	err = watcher.Add(portfile)
+	if err != nil {
+		log.Fatal("watcher.Add: ", err)
+	}
+
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return
+			}
+			// log.Println("event:", event)
+			if event.Op&fsnotify.Write == fsnotify.Write {
+				// log.Println("modified file:", event.Name)
+				time.Sleep(time.Duration(250000000)) // 250ms delay
+				reloadChannel <- true
+			}
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				log.Println("fswatcher fatal error:", err)
+				return
+			}
+			log.Println("fswatcher error:", err)
+		}
+	}
 }
 
-func PortFileReloadChannel() chan int {
+func PortFileReloadChannel() chan bool {
 	return reloadChannel
 }
 
