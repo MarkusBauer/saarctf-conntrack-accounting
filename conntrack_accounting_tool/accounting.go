@@ -3,6 +3,8 @@ package main
 import (
 	"github.com/ti-mo/conntrack"
 	"log"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -78,6 +80,18 @@ func AccountOpenConnection(info *ConnectionInfo) {
 func FlushAccountingTableToOutput(timestamp time.Time) {
 	start := time.Now()
 	size := len(AccountingTable)
+
+	var f *os.File
+	var err error
+	if OutputFolder != "" {
+		fname := filepath.Join(OutputFolder, "traffic_"+timestamp.Format("2006-01-02T15_04_05")+".csv")
+		f, err = os.OpenFile(fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Fatal("Open csv file", err)
+		}
+		defer f.Close()
+	}
+
 	for key, entry := range AccountingTable {
 		var line strings.Builder
 		line.WriteString(strconv.FormatInt(timestamp.UnixNano(), 10))
@@ -103,6 +117,12 @@ func FlushAccountingTableToOutput(timestamp time.Time) {
 		_, err := Output.WriteString(line.String())
 		if err != nil {
 			log.Fatal("Output write error: ", err)
+		}
+		if f != nil {
+			_, err := f.WriteString(line.String())
+			if err != nil {
+				log.Fatal("Output write error (file): ", err)
+			}
 		}
 	}
 	// Clear accounting table

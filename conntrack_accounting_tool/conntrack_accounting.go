@@ -45,6 +45,9 @@ var IpExclude net.IP
 // Output file, default is stdout
 var Output = os.Stdout
 
+// Folder to store csv files
+var OutputFolder string
+
 // Interval to output summaries (in seconds)
 var Interval int64 = 15
 
@@ -149,6 +152,7 @@ func main() {
 	dstfilterMask := flag.String("dst-group-mask", "255.255.255.255", "Destination filter mask")
 	excludeIP := flag.String("exclude-ip", "", "Exclude connections from or to a single IP")
 	pipeFile := flag.String("pipe", "", "Pipe file to use")
+	outputFolder := flag.String("output", "", "Output folder to store csv data")
 	interval := flag.Int64("interval", 15, "Output interval")
 	portFile := flag.String("ports", "", "File listing ports to track")
 	flag.BoolVar(&TrackOpenConnections, "track-open", false, "Track open connections")
@@ -178,6 +182,10 @@ func main() {
 		IpExclude = net.ParseIP(*excludeIP)
 		IpExcludePresent = true
 		log.Printf("Exclude IP: %s\n", IpExclude)
+	}
+
+	if outputFolder != nil && *outputFolder != "" {
+		OutputFolder = *outputFolder
 	}
 
 	if pipeFile != nil && *pipeFile != "" {
