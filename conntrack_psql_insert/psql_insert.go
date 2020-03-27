@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path"
 	"strings"
 	"syscall"
 	"time"
@@ -34,8 +35,6 @@ func watchFolderForCSV(directory string) chan string {
 				}
 				// log.Println("event:", event)
 				if event.Op&fsnotify.Write == fsnotify.Write {
-					// log.Println("modified file:", event.Name)
-					//time.Sleep(time.Duration(200000000)) // 200ms delay
 					if strings.HasSuffix(strings.ToLower(event.Name), ".csv") {
 						files <- event.Name
 					}
@@ -89,6 +88,7 @@ func main() {
 	username := flag.String("user", "", "Postgresql username")
 	passwd := flag.String("pass", "", "Postgresql password")
 	watchFolder := flag.String("watch", "", "Watch this folder for incoming csv's")
+	watchMoveFolder := flag.String("move", "", "Move files after they have been read")
 	flag.Parse()
 
 	db := Database{}
@@ -101,10 +101,23 @@ func main() {
 	// create table
 	db.CreateTable()
 
-	for _, fname := range flag.Args() {
+	// how to handle files
+	handleFile := func (fname string) {
 		db.InsertCSV(fname)
+		if watchMoveFolder != nil && *watchMoveFolder != "" {
+			err := os.Rename(fname, path.Join(*watchMoveFolder, path.Base(fname)))
+			if err != nil {
+				log.Println("Move error:", err)
+			}
+		}
 	}
 
+	// handle commandline arguments
+	for _, fname := range flag.Args() {
+		handleFile(fname)
+	}
+
+	// watch for further files
 	if watchFolder != nil && *watchFolder != "" {
 		files := watchFolderForCSV(*watchFolder)
 		files = deduplicateEvents(files)
@@ -113,7 +126,7 @@ func main() {
 			select {
 			case fname := <-files:
 				log.Printf("Loading file %s ...\n", fname)
-				db.InsertCSV(fname)
+				go handleFile(fname)
 			case sig := <-signalChannel:
 				log.Println("[Signal] Terminating with signal \"" + sig.String() + "\" ...")
 				return
