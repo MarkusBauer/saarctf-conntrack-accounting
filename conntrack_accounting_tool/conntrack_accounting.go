@@ -20,7 +20,7 @@ import (
 const NetfilterConntrackAcctSetting = "/proc/sys/net/netfilter/nf_conntrack_acct"
 
 // 2020 we saw at most 117696 entries. That means: this pipe has a buffer for 285 bytes / entry.
-const PipeBufferSize = 32*1024*1024
+const PipeBufferSize = 32 * 1024 * 1024
 
 // Source filter configuration (from command line)
 var SourceFilterPresent bool
@@ -97,6 +97,7 @@ func handleAllChannels() {
 	conntrackEventChannel, conntrackErrorChannel := GetConntrackEvents()
 	signalChannel := WaitForTerminationChannel()
 	dumpingChannel := GetDumpingChannel()
+	portfileReloadChannel := PortFileReloadChannel()
 	log.Println("Running ...")
 	var eventCounter int
 	var interestingEventCounter int
@@ -121,6 +122,11 @@ func handleAllChannels() {
 			}
 			FlushAccountingTableToOutput(time.Now())
 			return
+		case <-portfileReloadChannel:
+			err := PortFileReload()
+			if err != nil {
+				log.Println("[Ports] Could not load file: ", err)
+			}
 		case dump := <-dumpingChannel:
 			handleDump(dump)
 			log.Println("[Events]", interestingEventCounter, "("+strconv.Itoa(eventCounter)+") events since last update")
@@ -144,6 +150,7 @@ func main() {
 	excludeIP := flag.String("exclude-ip", "", "Exclude connections from or to a single IP")
 	pipeFile := flag.String("pipe", "", "Pipe file to use")
 	interval := flag.Int64("interval", 15, "Output interval")
+	portFile := flag.String("ports", "", "File listing ports to track")
 	flag.BoolVar(&TrackOpenConnections, "track-open", false, "Track open connections")
 	flag.Parse()
 
@@ -197,12 +204,12 @@ func main() {
 			}
 		}()
 		// Set the size of the pipe's buffer
-		if (isNewPipe) {
-			_, err = unix.FcntlInt(Output.Fd(), unix.F_SETPIPE_SZ, PipeBufferSize);
+		if isNewPipe {
+			_, err = unix.FcntlInt(Output.Fd(), unix.F_SETPIPE_SZ, PipeBufferSize)
 			if err != nil {
 				log.Println("Could not change pipe buffer size: ", err)
 			}
-			pipeBuffer, err := unix.FcntlInt(Output.Fd(), unix.F_GETPIPE_SZ, 0);
+			pipeBuffer, err := unix.FcntlInt(Output.Fd(), unix.F_GETPIPE_SZ, 0)
 			if err != nil {
 				log.Println("Could not determine pipe buffer size: ", err)
 			} else {
@@ -214,6 +221,13 @@ func main() {
 
 	if interval != nil && *interval > 1 {
 		Interval = *interval
+	}
+
+	if portFile != nil && *portFile != "" {
+		err := PortFileInit(*portFile)
+		if err != nil {
+			log.Fatal("Port file:", err)
+		}
 	}
 
 	err := EnableNetfilterTrafficAccounting()
