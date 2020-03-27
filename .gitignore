@@ -1,2 +1,3 @@
-/conntrack_accounting
-/go.sum
+/conntrack_accounting_tool/go.sum
+/conntrack_accounting_tool/conntrack_accounting
+
