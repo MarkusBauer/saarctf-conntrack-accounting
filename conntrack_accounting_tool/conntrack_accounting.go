@@ -186,6 +186,7 @@ func main() {
 
 	if outputFolder != nil && *outputFolder != "" {
 		OutputFolder = *outputFolder
+		_ = os.Mkdir(OutputFolder, 0o755)
 	}
 
 	if pipeFile != nil && *pipeFile != "" {
