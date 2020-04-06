@@ -124,6 +124,15 @@ func GetConntrackEvents() (chan conntrack.Event, chan error) {
 		log.Fatal(err)
 	}
 
+	buffersize := 212992 * 128 // around 26MB - "viel hilft viel"
+	for ; buffersize > 1024; buffersize = buffersize / 2 {
+		err = conn.SetReadBuffer(buffersize)
+		if err == nil {
+			break
+		}
+	}
+	log.Println("Set read buffer size to", buffersize/1024, "KB")
+
 	eventChannel := make(chan conntrack.Event, 65536)
 	errorChannel, err := conn.Listen(eventChannel, 8, netfilter.GroupsCT)
 	if err != nil {
@@ -143,7 +152,7 @@ func nextTimestamp(interval int64) int64 {
 
 type DumpResult struct {
 	Timestamp time.Time
-	flows []conntrack.Flow
+	flows     []conntrack.Flow
 }
 
 func runDumping(channel chan DumpResult, timestamp int64) {
