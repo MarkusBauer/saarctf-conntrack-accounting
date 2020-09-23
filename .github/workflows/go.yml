@@ -32,15 +32,27 @@ jobs:
 
     - name: Build
       run: |
+        mkdir -p conntrack-accounting
         cd conntrack_accounting_tool
         go build -v -ldflags "-extldflags '-static'" .
+        cp conntrack_accounting_tool ../conntrack-accounting/conntrack_accounting
         cd ../conntrack_psql_insert
         go build -v -ldflags "-extldflags '-static'" .
-
+        cp conntrack_psql_insert ../conntrack-accounting/psql_insert
+        
     #- name: Test
     #  run: go test -v -ldflags "-extldflags '-static'" .
+  
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v2.1.4
+      with:
+        # Artifact name
+        name: binaries
+        # A file, directory or wildcard pattern that describes what to upload
+        path: conntrack-accounting/*
+        if-no-files-found: error
       
-    - name: Create a Release
+    - name: Create Release
       uses: actions/create-release@v1.1.4
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
