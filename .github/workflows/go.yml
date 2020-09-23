@@ -37,6 +37,8 @@ jobs:
         go build -v -ldflags "-extldflags '-static'" -o ../conntrack-accounting/conntrack_accounting
         cd ../conntrack_psql_insert
         go build -v -ldflags "-extldflags '-static'" -o ../conntrack-accounting/psql_insert
+        cd ..
+        zip conntrack-accounting.zip conntrack-accounting/*_*
         
     #- name: Test
     #  run: go test -v -ldflags "-extldflags '-static'" .
@@ -51,6 +53,7 @@ jobs:
         if-no-files-found: error
       
     - name: Create Release
+      id: create_release
       uses: actions/create-release@v1.1.4
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
@@ -73,3 +76,14 @@ jobs:
         #owner: # optional
         # Repository on which to release.  Used only if you want to create the release on another repo
         #repo: # optional
+
+    - name: Upload Release Asset
+      id: upload-release-asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
+        asset_path: ./conntrack-accounting.zip
+        asset_name: conntrack-accounting.zip
+        asset_content_type: application/zip
