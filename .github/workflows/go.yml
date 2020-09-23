@@ -34,9 +34,9 @@ jobs:
       run: |
         mkdir -p conntrack-accounting
         cd conntrack_accounting_tool
-        go build -v -ldflags "-extldflags '-static'" . -o ../conntrack-accounting/conntrack_accounting
+        go build -v -ldflags "-extldflags '-static'" -o ../conntrack-accounting/conntrack_accounting
         cd ../conntrack_psql_insert
-        go build -v -ldflags "-extldflags '-static'" . -o ../conntrack-accounting/psql_insert
+        go build -v -ldflags "-extldflags '-static'" -o ../conntrack-accounting/psql_insert
         
     #- name: Test
     #  run: go test -v -ldflags "-extldflags '-static'" .
