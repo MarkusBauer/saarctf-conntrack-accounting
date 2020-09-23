@@ -1,0 +1,23 @@
+# systemd service unit for conntrack postgresql import tool.
+# the configuration is taken from saarCTF 2020, replace with your actual IPs
+# also replace your installation path
+# Replace /etc/environment with a file containing your postgresql credentials.
+
+[Unit]
+Description=Conntrack Traffic Accounting to psql Tool
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/opt/conntrack_accounting/conntrack_psql_insert/psql_insert -host=$PG_SERVER -db=$PG_DATABASE -user=$PG_USERNAME -pass=$PG_PASSWORD -watch=/root/conntrack_data/new -move=/root/conntrack_data/processed
+WorkingDirectory=/opt/conntrack_accounting
+StandardOutput=append:/var/log/conntrack_accounting_psql.log
+StandardError=append:/var/log/conntrack_accounting_psql.log
+Restart=on-failure
+RestartSec=5s
+EnvironmentFile=/etc/environment
+
+[Install]
+WantedBy=multi-user.target
