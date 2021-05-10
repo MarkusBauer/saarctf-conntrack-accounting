@@ -49,17 +49,24 @@ func AccountTraffic(info *ConnectionInfo) {
 			return
 		}
 	}
-	// Account data
+	// Account data and reset connection
 	entry := getOrCreateAccountingTableEntry(info.key)
-	entry.packetsSrcToDst += info.packetsSrcToDst - info.packetsSrcToDstAccounted
-	entry.packetsDstToSrc += info.packetsDstToSrc - info.packetsDstToSrcAccounted
-	entry.bytesSrcToDst += info.bytesSrcToDst - info.bytesSrcToDstAccounted
-	entry.bytesDstToSrc += info.bytesDstToSrc - info.bytesDstToSrcAccounted
-	// Reset connection
-	info.packetsSrcToDstAccounted = info.packetsSrcToDst
-	info.packetsDstToSrcAccounted = info.packetsDstToSrc
-	info.bytesSrcToDstAccounted = info.bytesSrcToDst
-	info.bytesDstToSrcAccounted = info.bytesDstToSrc
+	if info.packetsSrcToDst > info.packetsSrcToDstAccounted {
+		entry.packetsSrcToDst += info.packetsSrcToDst - info.packetsSrcToDstAccounted
+		info.packetsSrcToDstAccounted = info.packetsSrcToDst
+	}
+	if info.packetsDstToSrc > info.packetsDstToSrcAccounted {
+		entry.packetsDstToSrc += info.packetsDstToSrc - info.packetsDstToSrcAccounted
+		info.packetsDstToSrcAccounted = info.packetsDstToSrc
+	}
+	if info.bytesSrcToDst > info.bytesSrcToDstAccounted {
+		entry.bytesSrcToDst += info.bytesSrcToDst - info.bytesSrcToDstAccounted
+		info.bytesSrcToDstAccounted = info.bytesSrcToDst
+	}
+	if info.bytesDstToSrc > info.bytesDstToSrcAccounted {
+		entry.bytesDstToSrc += info.bytesDstToSrc - info.bytesDstToSrcAccounted
+		info.bytesDstToSrcAccounted = info.bytesDstToSrc
+	}
 }
 
 func AccountConnectionClose(info *ConnectionInfo) {
