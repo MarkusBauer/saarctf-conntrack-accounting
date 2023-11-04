@@ -166,7 +166,7 @@ func runDumping(channel chan DumpResult, timestamp int64) {
 	}
 	defer conn.Close()
 	// Query dumps
-	flows, err := conn.DumpFilter(conntrack.Filter{Mark: 0, Mask: 0})
+	flows, err := conn.DumpFilter(conntrack.Filter{Mark: 0, Mask: 0}, &conntrack.DumpOptions{})
 	if err != nil {
 		log.Fatal("DumpFilter:", err)
 	}

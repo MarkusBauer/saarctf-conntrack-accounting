@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"net/netip"
 	"os"
 	"os/signal"
 	"strconv"
@@ -40,7 +41,7 @@ var DestGroupMask = net.IPv4Mask(255, 255, 255, 255)
 
 // Exclude this IP
 var IpExcludePresent bool
-var IpExclude net.IP
+var IpExclude netip.Addr
 
 // Include ICMP?
 var ICMPInclude bool
@@ -62,13 +63,13 @@ func FlowIsInteresting(flow *conntrack.Flow) bool {
 	if flow.TupleOrig.IP.IsIPv6() || (flow.TupleOrig.Proto.Protocol == PROTO_ICMP && !ICMPInclude) {
 		return false
 	}
-	if IpExcludePresent && (IpExclude.Equal(flow.TupleOrig.IP.SourceAddress) || IpExclude.Equal(flow.TupleOrig.IP.DestinationAddress)) {
+	if IpExcludePresent && (IpExclude == flow.TupleOrig.IP.SourceAddress || IpExclude == flow.TupleOrig.IP.DestinationAddress) {
 		return false
 	}
-	if SourceFilterPresent && !SourceFilterNet.Contains(flow.TupleOrig.IP.SourceAddress) {
+	if SourceFilterPresent && !SourceFilterNet.Contains(ConvertIp(flow.TupleOrig.IP.SourceAddress)) {
 		return false
 	}
-	if DestFilterPresent && !DestFilterNet.Contains(flow.TupleOrig.IP.DestinationAddress) {
+	if DestFilterPresent && !DestFilterNet.Contains(ConvertIp(flow.TupleOrig.IP.DestinationAddress)) {
 		return false
 	}
 	return true
@@ -148,6 +149,7 @@ func handleAllChannels() {
 }
 
 func main() {
+	var err error
 	//IPv4 only for now
 	srcfilter := flag.String("src", "", "Source network filter (CIDR notation)")
 	srcfilterMask := flag.String("src-group-mask", "255.255.255.255", "Source filter mask")
@@ -183,8 +185,12 @@ func main() {
 	SourceGroupMask = net.IPMask(net.ParseIP(*srcfilterMask).To4())
 	DestGroupMask = net.IPMask(net.ParseIP(*dstfilterMask).To4())
 	if excludeIP != nil && *excludeIP != "" {
-		IpExclude = net.ParseIP(*excludeIP)
+		// IpExclude = net.ParseIP(*excludeIP)
+		IpExclude, err = netip.ParseAddr(*excludeIP)
 		IpExcludePresent = true
+		if err != nil {
+			log.Panicf("Cannot parse exclude ip: %s", err)
+		}
 		log.Printf("Exclude IP: %s\n", IpExclude)
 	}
 
@@ -247,7 +253,7 @@ func main() {
 		}
 	}
 
-	err := EnableNetfilterTrafficAccounting()
+	err = EnableNetfilterTrafficAccounting()
 	if err != nil {
 		log.Println("Could not check or enable conntrack traffic accounting. ")
 		log.Println("Use: echo 1 > " + NetfilterConntrackAcctSetting)

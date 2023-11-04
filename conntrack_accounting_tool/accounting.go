@@ -3,6 +3,8 @@ package main
 import (
 	"github.com/ti-mo/conntrack"
 	"log"
+	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -20,11 +22,16 @@ type AccountingEntry struct {
 
 var AccountingTable = make(map[string]*AccountingEntry)
 
+func ConvertIp(ip netip.Addr) net.IP {
+	b := ip.As4()
+	return b[:]
+}
+
 func AccountingKey(flow *conntrack.Flow) string {
 	proto := ProtoLookup(flow.TupleOrig.Proto.Protocol)
 	s := proto + ","
-	s += flow.TupleOrig.IP.SourceAddress.Mask(SourceGroupMask).String() + ","
-	s += flow.TupleOrig.IP.DestinationAddress.Mask(DestGroupMask).String() + ","
+	s += ConvertIp(flow.TupleOrig.IP.SourceAddress).Mask(SourceGroupMask).String() + ","
+	s += ConvertIp(flow.TupleOrig.IP.DestinationAddress).Mask(DestGroupMask).String() + ","
 	if PortIsInteresting(proto, flow.TupleOrig.Proto.DestinationPort) {
 		s += strconv.FormatUint(uint64(flow.TupleOrig.Proto.DestinationPort), 10)
 	} else {
